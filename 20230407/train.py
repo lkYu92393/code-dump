@@ -6,9 +6,13 @@ import torch
 from transformers import BertForQuestionAnswering
 from transformers import BertTokenizerFast
 
+
+parser = argparse.ArgumentParser(description='Process some integers.')
+
 parser.add_argument('--model', default="bert-large-uncased-whole-word-masking-finetuned-squad")
 parser.add_argument('--output', default="./bert-qa")
 args = parser.parse_args()
+
 
 model_name = args.model
 output = args.output
