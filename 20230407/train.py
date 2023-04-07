@@ -1,21 +1,13 @@
-import argparse
-import os, requests
-
+import os
+import requests
+import json
 
 import torch
 from transformers import BertForQuestionAnswering
 from transformers import BertTokenizerFast
 
-
-parser = argparse.ArgumentParser(description='Process some integers.')
-
-parser.add_argument('--model', default="bert-large-uncased-whole-word-masking-finetuned-squad")
-parser.add_argument('--output', default="./bert-qa")
-args = parser.parse_args()
-
-
-model_name = args.model
-output = args.output
+model_name = "bert-large-uncased-whole-word-masking-finetuned-squad"
+output = "./bert-qa"
 
 DATA_DIR = "./"
 url = 'https://rajpurkar.github.io/SQuAD-explorer/dataset/'
@@ -23,18 +15,17 @@ url = 'https://rajpurkar.github.io/SQuAD-explorer/dataset/'
 if not os.path.exists(DATA_DIR):
     os.mkdir(DATA_DIR)
 
-    # loop through
-    for filename in ['train-v2.0.json', 'dev-v2.0.json']:
-        # make the request to download data over HTTP
-        res = requests.get(f'{url}{filename}')
-        # write to file
-        with open(f'{os.path.join(DATA_DIR, filename)}', 'wb') as f:
-            for chunk in res.iter_content(chunk_size=4):
-                f.write(chunk)
+# loop through
+for filename in ['train-v2.0.json', 'dev-v2.0.json']:
+    # make the request to download data over HTTP
+    res = requests.get(f'{url}{filename}')
+    # write to file
+    with open(f'{os.path.join(DATA_DIR, filename)}', 'wb') as f:
+        for chunk in res.iter_content(chunk_size=4):
+            f.write(chunk)
 
-        print(f"{filename} downloaded.")
+    print(f"{filename} downloaded.")
 
-import os, json
 
 
 def read_squad_json(filename: str) -> tuple:
@@ -66,6 +57,8 @@ def read_squad_json(filename: str) -> tuple:
 train_contexts, train_questions, train_answers = read_squad_json('train-v2.0.json')
 valid_contexts, valid_questions, valid_answers = read_squad_json('dev-v2.0.json')
 
+
+
 def apply_end_index(answers: list, contexts: list) -> list:
     '''
     the dataset has already character start_index of answers' 
@@ -85,9 +78,8 @@ def apply_end_index(answers: list, contexts: list) -> list:
 train_answers = apply_end_index(train_answers, train_contexts)
 valid_answers = apply_end_index(valid_answers, valid_contexts)
 
-from transformers import AutoTokenizer
 
-tokenizer = AutoTokenizer.from_pretrained('distilbert-base-uncased', use_fast=True)
+tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
 
 def encode_data(contexts: list, questions: list, answers: list) -> dict:
     encodings = tokenizer(contexts, questions, truncation=True, padding=True, return_tensors="pt")
@@ -128,7 +120,6 @@ train_encodings.keys()
 del train_contexts, train_questions, train_answers
 del valid_contexts, valid_questions, valid_answers
 
-import torch
 
 
 class SquadDataset(torch.utils.data.Dataset):
@@ -147,6 +138,8 @@ valid_ds = SquadDataset(valid_encodings)
 
 del train_encodings, valid_encodings
 
+print("FINISH PREPING DATASET. MOVE TO TRAINING")
+
 
 #prepare BERT model and tokenizer
 if os.path.exists(output):
@@ -155,7 +148,6 @@ if os.path.exists(output):
 else:
     model = BertForQuestionAnswering.from_pretrained(model_name)
     print("PULLING NEW MODEL FROM WEB")
-tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
 
 # setup GPU/CPU
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -217,6 +209,7 @@ for epoch in range(3):
 tokenizer.save_pretrained(MODEL_DIR)
 model.save_pretrained(MODEL_DIR)
 
+print("FINISH TRAINING. MOVE TO EVALUATION.")
 
 from torch.utils.data import DataLoader
 
