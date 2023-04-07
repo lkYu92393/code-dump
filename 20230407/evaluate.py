@@ -1,6 +1,3 @@
-# reference 
-# https://www.kaggle.com/code/peymaanalavi/questionanswering-on-squad
-
 import argparse
 import os
 import requests
@@ -12,11 +9,9 @@ from transformers import BertTokenizerFast
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 
-parser.add_argument('--model', default="bert-large-uncased-whole-word-masking-finetuned-squad")
 parser.add_argument('--output', default="./bert-qa")
 args = parser.parse_args()
 
-MODEL_NAME = args.model
 MODEL_DIR = args.output
 
 DATA_DIR = "./"
@@ -64,10 +59,7 @@ def read_squad_json(filename: str) -> tuple:
     return contexts, questions, answers
 
 
-train_contexts, train_questions, train_answers = read_squad_json('train-v2.0.json')
 valid_contexts, valid_questions, valid_answers = read_squad_json('dev-v2.0.json')
-
-
 
 def apply_end_index(answers: list, contexts: list) -> list:
     '''
@@ -84,12 +76,10 @@ def apply_end_index(answers: list, contexts: list) -> list:
     return _answers
 
 
-
-train_answers = apply_end_index(train_answers, train_contexts)
 valid_answers = apply_end_index(valid_answers, valid_contexts)
 
-
 tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+
 
 def encode_data(contexts: list, questions: list, answers: list) -> dict:
     encodings = tokenizer(contexts, questions, truncation=True, padding=True, return_tensors="pt")
@@ -121,15 +111,8 @@ def encode_data(contexts: list, questions: list, answers: list) -> dict:
     return encodings
 
 
-
-train_encodings = encode_data(train_contexts, train_questions, train_answers)
 valid_encodings = encode_data(valid_contexts, valid_questions, valid_answers)
-
-train_encodings.keys()
-
-del train_contexts, train_questions, train_answers
 del valid_contexts, valid_questions, valid_answers
-
 
 
 class SquadDataset(torch.utils.data.Dataset):
@@ -143,83 +126,14 @@ class SquadDataset(torch.utils.data.Dataset):
         return len(self.encodings['input_ids'])
 
 
-train_ds = SquadDataset(train_encodings)
 valid_ds = SquadDataset(valid_encodings)
 
-del train_encodings, valid_encodings
+del valid_encodings
 
-print("FINISH PREPING DATASET. MOVE TO TRAINING")
+print("FINISH PREPING DATASET. MOVE TO EVALUATION")
 
-
-#prepare BERT model and tokenizer
-if os.path.exists(MODEL_DIR):
-    model = BertForQuestionAnswering.from_pretrained(MODEL_DIR)
-    print("EXISTING MODEL FOUND")
-else:
-    model = BertForQuestionAnswering.from_pretrained(MODEL_NAME)
-    print("PULLING NEW MODEL FROM WEB")
-
-# setup GPU/CPU
-device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-# move model over to detected device
-model.to(device)
-# activate training mode of model
-model.train()
-
-
-from transformers import AdamW
-
-# initialize adam optimizer with weight decay (reduces chance of overfitting)
-optim = AdamW(model.parameters(), lr=5e-5)
-
-
-from torch.utils.data import DataLoader
-from tqdm import tqdm
-
-import warnings
-warnings.simplefilter("ignore")
-
-
-# initialize data loader for training data
-train_loader = DataLoader(train_ds, batch_size=16, shuffle=True)
-
-
-for epoch in range(3):
-    # set model to train mode
-    model.train()
-    
-    # setup loop (we use tqdm for the progress bar)
-    loop = tqdm(train_loader, leave=True)
-    for batch in loop:
-        # initialize calculated gradients (from prev step)
-        optim.zero_grad()
-        
-        # pull all the tensor batches required for training
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
-        start_positions = batch['start_positions'].to(device)
-        end_positions = batch['end_positions'].to(device)
-        
-        # train model on batch and return outputs (incl. loss)
-        outputs = model(input_ids=input_ids, attention_mask=attention_mask,
-                        start_positions=start_positions, end_positions=end_positions)
-        # extract loss
-        loss = outputs[0]
-        # calculate loss for every parameter that needs grad update
-        loss.backward()
-        
-        # update parameters
-        optim.step()
-        
-        # print relevant info to progress bar
-        loop.set_description(f'Epoch {epoch}')
-        loop.set_postfix(loss=loss.item())
-
-
-tokenizer.save_pretrained(MODEL_DIR)
-model.save_pretrained(MODEL_DIR)
-
-print("FINISH TRAINING. MOVE TO EVALUATION.")
+tokenizer = BertForQuestionAnswering.from_pretrained(MODEL_DIR)
+model = BertForQuestionAnswering.from_pretrained(MODEL_DIR)
 
 from torch.utils.data import DataLoader
 
